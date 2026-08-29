@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/device_service.dart';
+import '../services/firestore_service.dart';
 import '../core/constants.dart';
 
 class UserHistoryScreen extends StatefulWidget {
@@ -12,8 +13,9 @@ class UserHistoryScreen extends StatefulWidget {
 
 class _UserHistoryScreenState extends State<UserHistoryScreen> {
   final DeviceService _deviceService = DeviceService();
+  final FirestoreService _firestoreService = FirestoreService();
   String? _currentIp;
-
+  
   @override
   void initState() {
     super.initState();
@@ -25,7 +27,9 @@ class _UserHistoryScreenState extends State<UserHistoryScreen> {
     setState(() => _currentIp = ip);
   }
 
-  Future<void> _resendRequest(String description) async {
+  Future<void> _resendRequest(Map<String, dynamic> data) async {
+    final description = data['description'] ?? 'Без описания';
+    
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -43,17 +47,18 @@ class _UserHistoryScreenState extends State<UserHistoryScreen> {
         final deviceId = await _deviceService.getDeviceId();
         final osName = _deviceService.getOsName();
         
-        await FirebaseFirestore.instance.collection(FirestoreCollections.requests).add({
-          'device_id': deviceId,
-          'device_ip': _currentIp,
-          'description': description,
-          'room': 'Не определен', // При повторной отправке без поиска можно оставить так, или добавить логику поиска
-          'pc_number': 'Не указан',
-          'owner': 'Сотрудник',
-          'os_name': osName,
-          'status': RequestStatus.newRequest,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+        // Пытаемся получить информацию об устройстве из базы
+        final deviceInfo = await _firestoreService.getDeviceInfoByIp(_currentIp!);
+        
+        await _firestoreService.submitRequest(
+          deviceId: deviceId,
+          ip: _currentIp!,
+          description: description,
+          room: deviceInfo?['room'] ?? 'Не определен',
+          pcNumber: deviceInfo?['pc_number'] ?? 'Не указан',
+          owner: deviceInfo?['owner'] ?? 'Сотрудник',
+          osName: osName,
+        );
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -88,11 +93,7 @@ class _UserHistoryScreenState extends State<UserHistoryScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('История заявок')),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection(FirestoreCollections.requests)
-            .where('device_ip', isEqualTo: _currentIp)
-            .orderBy('timestamp', descending: true)
-            .snapshots(),
+        stream: _firestoreService.getUserHistoryStream(_currentIp!),
         builder: (context, snapshot) {
           if (snapshot.hasError) return Center(child: Text('Ошибка: ${snapshot.error}'));
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -103,7 +104,8 @@ class _UserHistoryScreenState extends State<UserHistoryScreen> {
           return ListView.builder(
             itemCount: snapshot.data!.docs.length,
             itemBuilder: (context, index) {
-              final data = snapshot.data!.docs[index].data() as Map<String, dynamic>;
+              final doc = snapshot.data!.docs[index];
+              final data = doc.data() as Map<String, dynamic>;
               final desc = data['description'] ?? 'Без описания';
               final status = data['status'] ?? 'new';
               final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
@@ -118,7 +120,7 @@ class _UserHistoryScreenState extends State<UserHistoryScreen> {
                   trailing: IconButton(
                     icon: const Icon(Icons.refresh, color: Colors.indigo),
                     tooltip: 'Отправить повторно',
-                    onPressed: () => _resendRequest(desc),
+                    onPressed: () => _resendRequest(data),
                   ),
                 ),
               );

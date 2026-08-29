@@ -4,7 +4,9 @@ import '../services/firestore_service.dart';
 import 'user_history_screen.dart';
 
 class UserRequestScreen extends StatefulWidget {
-  const UserRequestScreen({super.key});
+  final bool showHistoryOnly;
+  
+  const UserRequestScreen({super.key, this.showHistoryOnly = false});
 
   @override
   State<UserRequestScreen> createState() => _UserRequestScreenState();
@@ -30,13 +32,11 @@ class _UserRequestScreenState extends State<UserRequestScreen> {
     });
 
     try {
-      // 1. Получаем данные устройства
       final deviceId = await _deviceService.getDeviceId();
       final ip = await _deviceService.getIpAddress();
 
       setState(() => _statusText = 'Ищем информацию о кабинете...');
 
-      // 2. Ищем в базе по IP
       final deviceInfo = await _firestoreService.getDeviceInfoByIp(ip);
 
       final room = deviceInfo?['room'] ?? 'Не определен';
@@ -46,7 +46,6 @@ class _UserRequestScreenState extends State<UserRequestScreen> {
 
       setState(() => _statusText = 'Отправляем заявку...');
 
-      // 3. Отправляем в Firestore
       await _firestoreService.submitRequest(
         deviceId: deviceId,
         ip: ip,
@@ -75,6 +74,10 @@ class _UserRequestScreenState extends State<UserRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.showHistoryOnly) {
+      return const UserHistoryScreen();
+    }
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Тикетик'),

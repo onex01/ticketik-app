@@ -1,0 +1,27 @@
+release_version: "0.1.0"
+
+releases:
+  - name: deb
+    jobs:
+      - name: linux-deb
+        package:
+          platform: linux
+          target: deb
+          build_args:
+            dart-define:
+              - app_name=Тикетик
+          files:
+            - from: linux/runner/app_icon.ico
+              to: /usr/share/icons/hicolor/256x256/apps/ticketik.ico
+  - name: rpm
+    jobs:
+      - name: linux-rpm
+        package:
+          platform: linux
+          target: rpm
+          build_args:
+            dart-define:
+              - app_name=Тикетик
+          files:
+            - from: linux/runner/app_icon.ico
+              to: /usr/share/icons/hicolor/256x256/apps/ticketik.ico

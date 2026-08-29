@@ -1,0 +1,21 @@
+display_name: Тикетик
+package_name: ticketik
+maintainer:
+  name: Ticketik Team
+  email: support@ticketik.local
+co_authors:
+  - Ticketik Team
+priority: optional
+section: x11
+installed_size: 68000
+essential: false
+icon: linux/runner/app_icon.ico
+keywords:
+  - Тикетик
+  - техподдержка
+  - заявки
+generic_name: Система заявок
+categories:
+  - Utility
+startup_notify: true
+desktop_file: linux/runner/ticketik.desktop

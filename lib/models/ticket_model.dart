@@ -11,6 +11,7 @@ class TicketModel {
   final String osName;
   final String status;
   final DateTime? timestamp;
+  final bool isDeleted;
 
   TicketModel({
     required this.id,
@@ -23,6 +24,7 @@ class TicketModel {
     required this.osName,
     required this.status,
     this.timestamp,
+    this.isDeleted = false,
   });
 
   factory TicketModel.fromFirestore(DocumentSnapshot doc) {
@@ -38,6 +40,7 @@ class TicketModel {
       osName: data['os_name'] ?? 'Неизвестно',
       status: data['status'] ?? 'new',
       timestamp: (data['timestamp'] as Timestamp?)?.toDate(),
+      isDeleted: data['is_deleted'] ?? false,
     );
   }
 
@@ -51,6 +54,7 @@ class TicketModel {
       'owner': owner,
       'os_name': osName,
       'status': status,
+      'is_deleted': isDeleted,
     };
   }
 }
