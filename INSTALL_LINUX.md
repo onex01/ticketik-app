@@ -7,10 +7,10 @@
    ```bash
    # Ubuntu/Debian
    sudo apt-get update
-   sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+   sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libappindicator3-dev
    
    # Fedora/RHEL
-   sudo dnf install -y clang cmake ninja-build pkgconfig gtk3-devel
+   sudo dnf install -y clang cmake ninja-build pkgconfig gtk3-devel libappindicator-gtk3-devel
    ```
 
 3. Установленный flutter_distributor:
@@ -28,6 +28,10 @@ flutter_distributor package --platform linux --target deb
 
 Пакет будет создан в директории `dist/`.
 
+**Важно:** В пакете уже указаны необходимые зависимости:
+- libgtk-3-0
+- libappindicator3-1
+
 ## Сборка .rpm пакета (Fedora/RHEL/CentOS)
 
 ```bash
@@ -37,6 +41,10 @@ flutter_distributor package --platform linux --target rpm
 ```
 
 Пакет будет создан в директории `dist/`.
+
+**Важно:** В пакете уже указаны необходимые зависимости:
+- gtk3
+- libappindicator
 
 ## Ручная сборка через CMake
 
@@ -65,34 +73,40 @@ cp /workspace/linux/runner/app_icon.ico ticketik_DEB/usr/share/icons/hicolor/256
 # Создание control файла
 cat > ticketik_DEB/DEBIAN/control << 'CONTROL'
 Package: ticketik
-Version: 0.1.0
+Version: 0.8.5
 Section: x11
 Priority: optional
 Architecture: amd64
 Maintainer: Ticketik Team <support@ticketik.local>
 Description: Система заявок в техподдержку
  Тикетик - приложение для быстрой отправки заявок в техническую поддержку
-DEPENDS: libgtk-3-0
+DEPENDS: libgtk-3-0, libappindicator3-1
 CONTROL
 
 # Сборка DEB пакета
-dpkg-deb --build ticketik_DEB ticketik_0.1.0_amd64.deb
+dpkg-deb --build ticketik_DEB ticketik_0.8.5_amd64.deb
 ```
 
 ## Установка готовых пакетов
 
 ### Debian/Ubuntu
 ```bash
-sudo apt install ./ticketik_0.1.0_amd64.deb
+sudo apt install ./ticketik_0.8.5_amd64.deb
 ```
 
 ### Fedora/RHEL/CentOS
 ```bash
-sudo rpm -i ticketik-0.1.0.x86_64.rpm
+sudo rpm -i ticketik-0.8.5.x86_64.rpm
 ```
 
 ## Запуск приложения
 
 После установки приложение доступно:
 - Через меню приложений как "Тикетик"
-- Из командной строки: `ticketik_app`
+- Из командной строки: `ticketik`
+
+## Примечания
+
+- **Уведомления работают только на Android** — версии для Linux/Windows/macOS не поддерживают push-уведомления
+- Приложение автоматически определяет IP-адрес устройства при отправке заявки
+- Для работы уведомлений на Android необходимо предоставить разрешения при первом запуске

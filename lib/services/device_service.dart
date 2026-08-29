@@ -36,7 +36,7 @@ class DeviceService {
     return _cachedDeviceId!;
   }
 
-  /// Получает IP через системные команды (ipconfig/ifconfig)
+  /// Получает IP через системные команды (ipconfig/ifconfig) или сокет (Android)
   Future<String> getIpAddress() async {
     try {
       if (Platform.isWindows) {
@@ -47,7 +47,7 @@ class DeviceService {
         return await _getIpFromAndroid();
       }
     } catch (e) {
-      print('Ошибка получения IP: $e');
+      // Игнорируем ошибки, вернем значение по умолчанию
     }
     return 'IP_не_определен';
   }
