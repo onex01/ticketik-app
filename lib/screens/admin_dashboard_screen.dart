@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/ticket_model.dart';
 import '../widgets/ticket_card.dart';
 import '../services/firestore_service.dart';
@@ -11,72 +10,25 @@ class AdminDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firestoreService = FirestoreService();
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Панель администратора'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              // Обновление произойдет автоматически благодаря StreamBuilder
-            },
+            tooltip: 'Обновить',
+            onPressed: () {},
           ),
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: firestoreService.getActiveTicketsStream(),
+        // Убрали .orderBy и .where, чтобы гарантированно избежать ошибок индексации при откате
+        stream: FirebaseFirestore.instance
+            .collection(FirestoreCollections.requests)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            // Если ошибка связана с индексом, показываем сообщение с кнопкой
-            final errorMsg = snapshot.error.toString();
-            if (errorMsg.contains('index') || errorMsg.contains('failed-precondition')) {
-              const indexUrl = 'https://console.firebase.google.com/v1/r/project/ticketik-app/firestore/indexes?create_composite=Ck1wcm9qZWN0cy90aWNrZXRpay1hcHAvZGF0YWJhc2VzLyhkZWZhdWx0KS9jb2xsZWN0aW9uR3JvdXBzL3JlcXVlc3RzL2luZGV4ZXMvXxABGg0KCWRldmljZV9pcBABGg4KCmlzX2RlbGV0ZWQQARONCgl0aW1lc3RhbXAQAhoMCghfX25hbWVfXxAC';
-              
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.warning, size: 64, color: Colors.orange),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Требуется создать индекс в Firestore',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Нажмите кнопку ниже, чтобы открыть консоль Firebase и создать индекс автоматически.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.open_in_new),
-                        label: const Text('Создать индекс в Firebase'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                        ),
-                        onPressed: () async {
-                          final uri = Uri.parse(indexUrl);
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          } else {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Не удалось открыть ссылку. Скопируйте её вручную.')),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-            return Center(child: Text('Ошибка: ${snapshot.error}'));
+            return Center(child: Text('Ошибка загрузки: ${snapshot.error}'));
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -86,15 +38,23 @@ class AdminDashboardScreen extends StatelessWidget {
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text(
-                'Заявок пока нет',
+                'Заявок пока нет 🎉',
                 style: TextStyle(fontSize: 18, color: Colors.grey),
               ),
             );
           }
 
+          // 1. Преобразуем документы в модели
           final tickets = snapshot.data!.docs
               .map((doc) => TicketModel.fromFirestore(doc))
               .toList();
+
+          // 2. Сортируем на стороне клиента (мгновенно, без требований индексов от Firebase)
+          tickets.sort((a, b) {
+            final timeA = a.timestamp ?? DateTime(1970);
+            final timeB = b.timestamp ?? DateTime(1970);
+            return timeB.compareTo(timeA); // Сортировка по убыванию (новые сверху)
+          });
 
           return ListView.builder(
             itemCount: tickets.length,
@@ -121,61 +81,101 @@ class AdminDashboardScreen extends StatelessWidget {
   void _showTicketDetails(BuildContext context, TicketModel ticket) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) => Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Описание проблемы',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Text(ticket.description, style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 24),
-            Text('Кабинет: ${ticket.room}', style: TextStyle(fontSize: 16)),
-            Text('ПК: ${ticket.pcNumber}', style: TextStyle(fontSize: 16)),
-            Text('IP: ${ticket.deviceIp}', style: TextStyle(fontSize: 16)),
-            Text('Сотрудник: ${ticket.owner}', style: TextStyle(fontSize: 16)),
-            Text('ОС: ${ticket.osName}', style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _changeStatus(context, ticket);
-              },
-              child: const Text('Изменить статус'),
-            ),
-            const SizedBox(height: 16),
-            if (!ticket.isDeleted)
-              ElevatedButton.icon(
-                icon: const Icon(Icons.archive, color: Colors.white),
-                label: const Text('Архивировать заявку', style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Подтверждение'),
-                      content: const Text('Заявка будет скрыта из пользовательской истории, но останется в базе.'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-                        ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Архивировать')),
-                      ],
-                    ),
-                  );
-                  
-                  if (confirm == true) {
-                    await FirestoreService().softDeleteTicket(ticket.id);
-                    if (context.mounted) Navigator.pop(context);
-                  }
-                },
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24.0,
+          right: 24.0,
+          top: 24.0,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Детали заявки',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
-          ],
+              const Divider(height: 32),
+              _buildDetailRow('Описание', ticket.description),
+              const SizedBox(height: 16),
+              _buildDetailRow('Кабинет', ticket.room),
+              _buildDetailRow('ПК', ticket.pcNumber),
+              _buildDetailRow('IP-адрес', ticket.deviceIp),
+              _buildDetailRow('Сотрудник', ticket.owner),
+              _buildDetailRow('ОС', ticket.osName),
+              const SizedBox(height: 24),
+              
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _changeStatus(context, ticket);
+                      },
+                      icon: const Icon(Icons.sync),
+                      label: const Text('Сменить статус'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _archiveRequest(context, ticket.id),
+                      icon: const Icon(Icons.archive, color: Colors.white),
+                      label: const Text('В архив', style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            '$label:',
+            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getStatusText(String status) {
+    switch (status) {
+      case RequestStatus.newRequest: return 'Новая';
+      case RequestStatus.inProgress: return 'В работе';
+      case RequestStatus.done: return 'Выполнено';
+      default: return status;
+    }
   }
 
   void _changeStatus(BuildContext context, TicketModel ticket) {
@@ -197,6 +197,59 @@ class AdminDashboardScreen extends StatelessWidget {
     }
 
     firestoreService.updateTicketStatus(ticket.id, nextStatus);
+    
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Статус изменен на: ${_getStatusText(nextStatus)}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _archiveRequest(BuildContext context, String ticketId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Архивировать заявку?'),
+        content: const Text('Заявка будет скрыта из списка, но сохранится в базе данных.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false), 
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('В архив', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        // Мягкое удаление: помечаем как удаленную, не стирая из базы
+        await FirebaseFirestore.instance.collection('requests').doc(ticketId).update({
+          'is_deleted': true,
+          'archived_at': FieldValue.serverTimestamp(),
+        });
+        
+        if (context.mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Заявка успешно архивирована'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка архивации: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   void _showAddDeviceDialog(BuildContext context) {
@@ -204,7 +257,6 @@ class AdminDashboardScreen extends StatelessWidget {
     final roomController = TextEditingController();
     final pcController = TextEditingController();
     final ownerController = TextEditingController();
-    final firestoreService = FirestoreService();
 
     showDialog(
       context: context,
@@ -216,23 +268,36 @@ class AdminDashboardScreen extends StatelessWidget {
             children: [
               TextField(
                 controller: ipController,
-                decoration: const InputDecoration(labelText: 'IP-адрес (напр. 192.168.1.50)'),
-                keyboardType: TextInputType.text,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'IP-адрес',
+                  hintText: '192.168.1.50',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: roomController,
-                decoration: const InputDecoration(labelText: 'Кабинет'),
+                decoration: const InputDecoration(
+                  labelText: 'Кабинет',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: pcController,
-                decoration: const InputDecoration(labelText: 'Номер ПК'),
+                decoration: const InputDecoration(
+                  labelText: 'Номер ПК',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: ownerController,
-                decoration: const InputDecoration(labelText: 'Сотрудник (опционально)'),
+                decoration: const InputDecoration(
+                  labelText: 'Сотрудник',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ],
           ),
@@ -244,40 +309,42 @@ class AdminDashboardScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (ipController.text.isEmpty) {
+              final ip = ipController.text.trim();
+              if (ip.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Введите IP-адрес'), backgroundColor: Colors.red),
                 );
                 return;
               }
-              
-              // Простая валидация IP-адреса
-              final ipPattern = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$');
-              if (!ipPattern.hasMatch(ipController.text)) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Неверный формат IP-адреса'), backgroundColor: Colors.red),
-                );
-                return;
-              }
-              
+
               try {
-                await firestoreService.addDevice(
-                  ip: ipController.text.trim(),
-                  room: roomController.text.trim(),
-                  pcNumber: pcController.text.trim(),
-                  owner: ownerController.text.trim(),
-                );
-                
+                await FirebaseFirestore.instance
+                    .collection(FirestoreCollections.devices)
+                    .doc(ip)
+                    .set({
+                  'ip': ip,
+                  'room': roomController.text.trim(),
+                  'pc_number': pcController.text.trim(),
+                  'owner': ownerController.text.trim(),
+                  'created_at': FieldValue.serverTimestamp(),
+                }, SetOptions(merge: true)); // merge: true предотвращает ошибки, если документ уже есть
+
                 if (context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Устройство добавлено!'), backgroundColor: Colors.green),
+                    const SnackBar(
+                      content: Text('✅ Устройство успешно добавлено!'),
+                      backgroundColor: Colors.green,
+                    ),
                   );
                 }
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+                    SnackBar(
+                      content: Text('❌ Ошибка сохранения: $e'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
