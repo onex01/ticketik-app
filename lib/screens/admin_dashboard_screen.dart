@@ -22,9 +22,11 @@ class AdminDashboardScreen extends StatelessWidget {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // Убрали .orderBy и .where, чтобы гарантированно избежать ошибок индексации при откате
+        // Фильтруем только активные заявки (is_deleted == false)
+        // БЕЗ orderBy, чтобы избежать ошибки индексации
         stream: FirebaseFirestore.instance
             .collection(FirestoreCollections.requests)
+            .where('is_deleted', isEqualTo: false)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -38,22 +40,22 @@ class AdminDashboardScreen extends StatelessWidget {
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text(
-                'Заявок пока нет 🎉',
+                'Активных заявок пока нет 🎉',
                 style: TextStyle(fontSize: 18, color: Colors.grey),
               ),
             );
           }
 
-          // 1. Преобразуем документы в модели
+          // Преобразуем документы в модели
           final tickets = snapshot.data!.docs
               .map((doc) => TicketModel.fromFirestore(doc))
               .toList();
 
-          // 2. Сортируем на стороне клиента (мгновенно, без требований индексов от Firebase)
+          // Сортируем на стороне клиента (новые сверху)
           tickets.sort((a, b) {
             final timeA = a.timestamp ?? DateTime(1970);
             final timeB = b.timestamp ?? DateTime(1970);
-            return timeB.compareTo(timeA); // Сортировка по убыванию (новые сверху)
+            return timeB.compareTo(timeA);
           });
 
           return ListView.builder(
@@ -230,7 +232,6 @@ class AdminDashboardScreen extends StatelessWidget {
 
     if (confirm == true) {
       try {
-        // Мягкое удаление: помечаем как удаленную, не стирая из базы
         await FirebaseFirestore.instance.collection('requests').doc(ticketId).update({
           'is_deleted': true,
           'archived_at': FieldValue.serverTimestamp(),
@@ -239,13 +240,13 @@ class AdminDashboardScreen extends StatelessWidget {
         if (context.mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Заявка успешно архивирована'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('✅ Заявка архивирована'), backgroundColor: Colors.green),
           );
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка архивации: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('❌ Ошибка: $e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -327,13 +328,13 @@ class AdminDashboardScreen extends StatelessWidget {
                   'pc_number': pcController.text.trim(),
                   'owner': ownerController.text.trim(),
                   'created_at': FieldValue.serverTimestamp(),
-                }, SetOptions(merge: true)); // merge: true предотвращает ошибки, если документ уже есть
+                }, SetOptions(merge: true));
 
                 if (context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('✅ Устройство успешно добавлено!'),
+                      content: Text('✅ Устройство добавлено!'),
                       backgroundColor: Colors.green,
                     ),
                   );
@@ -342,7 +343,7 @@ class AdminDashboardScreen extends StatelessWidget {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('❌ Ошибка сохранения: $e'),
+                      content: Text('❌ Ошибка: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
