@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "876483465700",
+    "project_id": "ticketik-app",
+    "storage_bucket": "ticketik-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:876483465700:android:3179998468d0624d1bb7f1",
+        "android_client_info": {
+          "package_name": "com.ticketik"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD3JkV8inE23u30jQ5TsQ2sO5Yw7zAAqD0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

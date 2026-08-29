@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"ticketik-app","appId":"1:876483465700:android:dcf0b7feff0103fb1bb7f1","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"ticketik-app","configurations":{"android":"1:876483465700:android:dcf0b7feff0103fb1bb7f1","windows":"1:876483465700:web:c40250aad7b245ee1bb7f1"}}}}}}
