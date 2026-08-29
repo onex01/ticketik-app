@@ -36,21 +36,91 @@ class DeviceService {
     return _cachedDeviceId!;
   }
 
-  // Надежный способ получения IP для Windows, Linux и Android
+  /// Получает IP через системные команды (ipconfig/ifconfig)
   Future<String> getIpAddress() async {
     try {
-      // Создаем UDP-сокет и "подключаем" его к внешнему IP (данные не отправляются)
-      final socket = await Socket.connect('8.8.8.8', 53); 
+      if (Platform.isWindows) {
+        return await _getIpFromIpconfig();
+      } else if (Platform.isLinux) {
+        return await _getIpFromIfconfig();
+      } else if (Platform.isAndroid) {
+        return await _getIpFromAndroid();
+      }
+    } catch (e) {
+      print('Ошибка получения IP: $e');
+    }
+    return 'IP_не_определен';
+  }
+
+  /// Windows: парсит вывод ipconfig
+  Future<String> _getIpFromIpconfig() async {
+    final result = await Process.run('ipconfig', []);
+    if (result.exitCode != 0) return 'IP_не_определен';
+    
+    final output = result.stdout.toString();
+    final lines = output.split('\n');
+    
+    for (final line in lines) {
+      // Ищем строку вида "IPv4-адрес. . . . . . . . . . . . : 192.168.1.50"
+      if (line.contains('IPv4') || line.contains('IPv4 Address')) {
+        final match = RegExp(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})').firstMatch(line);
+        if (match != null) {
+          final ip = match.group(1)!;
+          // Фильтруем мусорные адреса
+          if (!ip.startsWith('169.254.') && !ip.startsWith('127.') && ip != '0.0.0.0') {
+            return ip;
+          }
+        }
+      }
+    }
+    return 'IP_не_определен';
+  }
+
+  /// Linux: парсит вывод ip addr или ifconfig
+  Future<String> _getIpFromIfconfig() async {
+    // Пробуем современную команду 'ip addr'
+    try {
+      final result = await Process.run('ip', ['addr', 'show']);
+      if (result.exitCode == 0) {
+        final output = result.stdout.toString();
+        final match = RegExp(r'inet (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})').firstMatch(output);
+        if (match != null) {
+          final ip = match.group(1)!;
+          if (!ip.startsWith('169.254.') && !ip.startsWith('127.') && ip != '0.0.0.0') {
+            return ip;
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Резерв: старая команда ifconfig
+    try {
+      final result = await Process.run('ifconfig', []);
+      if (result.exitCode == 0) {
+        final output = result.stdout.toString();
+        final match = RegExp(r'inet (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})').firstMatch(output);
+        if (match != null) {
+          final ip = match.group(1)!;
+          if (!ip.startsWith('169.254.') && !ip.startsWith('127.') && ip != '0.0.0.0') {
+            return ip;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return 'IP_не_определен';
+  }
+
+  /// Android: используем UDP-сокет (Process.run на Android ограничен)
+  Future<String> _getIpFromAndroid() async {
+    try {
+      final socket = await Socket.connect('8.8.8.8', 53, timeout: const Duration(seconds: 2));
       final ip = socket.address.address;
       await socket.close();
-      
-      // Проверка на случай, если вернется IPv6 или странный формат
-      if (ip.isEmpty || ip == '0.0.0.0') {
-        return 'IP_не_определен';
+      if (ip.isNotEmpty && !ip.contains(':') && ip != '0.0.0.0') {
+        return ip;
       }
-      return ip;
-    } catch (e) {
-      return 'IP_не_определен';
-    }
+    } catch (_) {}
+    return 'IP_не_определен';
   }
 }
