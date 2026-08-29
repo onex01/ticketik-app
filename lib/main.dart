@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'firebase_options.dart';
 import 'screens/user_request_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'core/app_theme.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Инициализация уведомлений только для мобильных платформ (Android)
+  if (!kIsWeb && Platform.isAndroid) {
+    final notificationService = NotificationService();
+    await notificationService.init();
+    await notificationService.setupFirebaseMessaging();
+  }
+  
   runApp(const TicketikApp());
 }
 
