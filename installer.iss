@@ -1,6 +1,6 @@
 [Setup]
 AppName=Тикетик
-AppVersion=0.1.0
+AppVersion=0.9.7
 AppPublisher=МАОУ «СОШ» №16
 DefaultDirName={autopf}\Ticketik
 DefaultGroupName=Тикетик

@@ -1,5 +1,6 @@
 display_name: Тикетик
 package_name: ticketik
+version: "0.8.5"
 maintainer:
   name: Ticketik Team
   email: support@ticketik.local
@@ -15,7 +16,13 @@ keywords:
   - техподдержка
   - заявки
 generic_name: Система заявок
+description: |
+  Тикетик – быстрая отправка заявок в техподдержку
+  Приложение для автоматической отправки заявок с определением устройства
 categories:
   - Utility
 startup_notify: true
 desktop_file: linux/runner/ticketik.desktop
+dependencies:
+  - gtk3
+  - libappindicator

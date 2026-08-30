@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:io' show Platform, Process;
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:network_info_plus/network_info_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
 
@@ -9,11 +10,20 @@ class DeviceService {
   DeviceService._internal();
 
   String? _cachedDeviceId;
+  String? _cachedIpAddress;
+
+  /// Проверяет, мобильная ли платформа (Android/iOS)
+  bool get isMobilePlatform {
+    if (kIsWeb) return false;
+    return Platform.isAndroid || Platform.isIOS;
+  }
 
   String getOsName() {
     if (defaultTargetPlatform == TargetPlatform.windows) return 'Windows';
     if (defaultTargetPlatform == TargetPlatform.linux) return 'Linux';
     if (defaultTargetPlatform == TargetPlatform.android) return 'Android';
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'iOS';
+    if (defaultTargetPlatform == TargetPlatform.macOS) return 'macOS';
     return 'Неизвестная ОС';
   }
 
@@ -25,31 +35,56 @@ class DeviceService {
     if (defaultTargetPlatform == TargetPlatform.android) {
       final androidInfo = await deviceInfo.androidInfo;
       _cachedDeviceId = androidInfo.id;
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final iosInfo = await deviceInfo.iosInfo;
+      _cachedDeviceId = iosInfo.identifierForVendor ?? const Uuid().v4();
     } else if (defaultTargetPlatform == TargetPlatform.windows) {
       final windowsInfo = await deviceInfo.windowsInfo;
       _cachedDeviceId = windowsInfo.deviceId;
-    } else {
+    } else if (defaultTargetPlatform == TargetPlatform.linux) {
       final linuxInfo = await deviceInfo.linuxInfo;
       _cachedDeviceId = linuxInfo.machineId ?? const Uuid().v4();
+    } else if (defaultTargetPlatform == TargetPlatform.macOS) {
+      final macInfo = await deviceInfo.macOsInfo;
+      _cachedDeviceId = macInfo.systemGUID ?? const Uuid().v4();
+    } else {
+      _cachedDeviceId = const Uuid().v4();
     }
     
     return _cachedDeviceId!;
   }
 
-  /// Получает IP через системные команды (ipconfig/ifconfig)
+  /// Получает IP-адрес в зависимости от платформы
+  /// На мобильных устройствах использует network_info_plus
+  /// На ПК использует системные команды
   Future<String> getIpAddress() async {
+    if (_cachedIpAddress != null) return _cachedIpAddress!;
+
     try {
-      if (Platform.isWindows) {
-        return await _getIpFromIpconfig();
+      if (isMobilePlatform) {
+        // На мобильных используем библиотеку network_info_plus
+        final info = NetworkInfo();
+        final ip = await info.getWifiIP();
+        if (ip != null && ip.isNotEmpty) {
+          _cachedIpAddress = ip;
+          return _cachedIpAddress!;
+        }
+      } else if (Platform.isWindows) {
+        _cachedIpAddress = await _getIpFromIpconfig();
+        return _cachedIpAddress!;
       } else if (Platform.isLinux) {
-        return await _getIpFromIfconfig();
-      } else if (Platform.isAndroid) {
-        return await _getIpFromAndroid();
+        _cachedIpAddress = await _getIpFromIfconfig();
+        return _cachedIpAddress!;
+      } else if (Platform.isMacOS) {
+        _cachedIpAddress = await _getIpFromIfconfig();
+        return _cachedIpAddress!;
       }
     } catch (e) {
-      print('Ошибка получения IP: $e');
+      // Игнорируем ошибки, вернем значение по умолчанию
     }
-    return 'IP_не_определен';
+    
+    _cachedIpAddress = 'IP_не_определен';
+    return _cachedIpAddress!;
   }
 
   /// Windows: парсит вывод ipconfig
@@ -76,7 +111,7 @@ class DeviceService {
     return 'IP_не_определен';
   }
 
-  /// Linux: парсит вывод ip addr или ifconfig
+  /// Linux/macOS: парсит вывод ip addr или ifconfig
   Future<String> _getIpFromIfconfig() async {
     // Пробуем современную команду 'ip addr'
     try {
@@ -111,16 +146,8 @@ class DeviceService {
     return 'IP_не_определен';
   }
 
-  /// Android: используем UDP-сокет (Process.run на Android ограничен)
-  Future<String> _getIpFromAndroid() async {
-    try {
-      final socket = await Socket.connect('8.8.8.8', 53, timeout: const Duration(seconds: 2));
-      final ip = socket.address.address;
-      await socket.close();
-      if (ip.isNotEmpty && !ip.contains(':') && ip != '0.0.0.0') {
-        return ip;
-      }
-    } catch (_) {}
-    return 'IP_не_определен';
+  /// Сброс кэша IP (если нужно обновить)
+  void resetIpCache() {
+    _cachedIpAddress = null;
   }
 }

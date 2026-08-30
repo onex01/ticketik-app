@@ -4,9 +4,93 @@ import '../models/ticket_model.dart';
 import '../widgets/ticket_card.dart';
 import '../services/firestore_service.dart';
 import '../core/constants.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
+import '../services/notification_service.dart';
+import 'dart:async';
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  final NotificationService _notificationService = NotificationService();
+  bool _notificationsEnabled = false;
+  StreamSubscription? _ticketsSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkNotificationStatus();
+  }
+
+  /// Проверяем, включены ли уведомления (только Android)
+  Future<void> _checkNotificationStatus() async {
+    if (!kIsWeb && Platform.isAndroid) {
+      // Уведомления уже инициализированы в main.dart
+      setState(() => _notificationsEnabled = true);
+    }
+  }
+
+  /// Включаем/выключаем уведомления о новых заявках
+  Future<void> _toggleNotifications() async {
+    if (!kIsWeb && Platform.isAndroid) {
+      setState(() => _notificationsEnabled = !_notificationsEnabled);
+      
+      if (_notificationsEnabled) {
+        // Подписываемся на новые заявки
+        _ticketsSubscription = FirebaseFirestore.instance
+            .collection('requests')
+            .where('is_deleted', isEqualTo: false)
+            .snapshots()
+            .listen((snapshot) {
+          if (snapshot.docChanges.isNotEmpty) {
+            for (var change in snapshot.docChanges) {
+              if (change.type == DocumentChangeType.added) {
+                final ticket = TicketModel.fromFirestore(change.doc);
+                _notificationService.showNewTicketNotification(
+                  description: ticket.description,
+                  room: ticket.room,
+                  pcNumber: ticket.pcNumber,
+                );
+              }
+            }
+          }
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✅ Уведомления включены'), backgroundColor: Colors.green),
+          );
+        }
+      } else {
+        // Отписываемся
+        await _ticketsSubscription?.cancel();
+        _ticketsSubscription = null;
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('🔕 Уведомления выключены'), backgroundColor: Colors.grey),
+          );
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Уведомления поддерживаются только на Android'), backgroundColor: Colors.orange),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticketsSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +98,13 @@ class AdminDashboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Панель администратора'),
         actions: [
+          // Кнопка включения/выключения уведомлений (только Android)
+          if (!kIsWeb && Platform.isAndroid)
+            IconButton(
+              icon: Icon(_notificationsEnabled ? Icons.notifications : Icons.notifications_off),
+              tooltip: _notificationsEnabled ? 'Уведомления включены' : 'Уведомления выключены',
+              onPressed: _toggleNotifications,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Обновить',
